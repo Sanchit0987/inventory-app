@@ -26,6 +26,4 @@ if (process.env.NODE_ENV === "production" && !isBuildPhase) {
 export const env = {
   DATABASE_URL: process.env.DATABASE_URL!,
   AUTH_SECRET: process.env.AUTH_SECRET!,
-  /** Show one-click demo login buttons + allow demo seed accounts (off by default in prod) */
-  DEMO_MODE: process.env.DEMO_MODE === "true",
 };

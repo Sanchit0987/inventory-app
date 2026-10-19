@@ -23,7 +23,6 @@ services:
     environment:
       DATABASE_URL: postgresql://inventory:${POSTGRES_PASSWORD}@db:5432/inventory
       AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET in .env (openssl rand -base64 48)}
-      DEMO_MODE: ${DEMO_MODE:-false}
     ports:
       - "${APP_PORT:-3000}:3000"
     healthcheck:

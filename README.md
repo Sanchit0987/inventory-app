@@ -79,7 +79,7 @@ Production hardening in place:
 | Schema | Versioned Prisma migrations (`prisma/migrations`), applied via `prisma migrate deploy` on container start — no `db push` in prod |
 | Auth | httpOnly `secure` `sameSite=lax` JWT cookie; bcrypt; timing-safe login (dummy-hash compare on unknown emails); login rate limit 10/min/IP, signup 5/10min/IP |
 | Bootstrap | First signup on an empty DB becomes an active admin (no seeded credentials required) |
-| Demo accounts | One-click demo login buttons hidden unless `DEMO_MODE=true` |
+| Credentials | No quick-login shortcuts on the login page — all access via the sign-in form or self-signup |
 | Document numbers | Atomic `DocCounter` upsert+increment — no duplicate SO/PO/INV numbers under concurrency |
 | HTTP headers | `X-Frame-Options: DENY`, CSP frame-ancestors, nosniff, Referrer-Policy, Permissions-Policy, HSTS; `x-powered-by` removed |
 | Ops | `/api/health` liveness+DB probe (public, used by compose healthcheck); standalone output; non-root container user |
@@ -105,13 +105,30 @@ npm run test:e2e   # browser test suite (expects server on :4731)
 
 `.env` defaults to `postgresql://postgres@localhost:54329/postgres`.
 
-## Demo accounts (one-click buttons on the login page)
+## Login details
+
+Sign in through the form at `/login` (no quick-login buttons).
+
+**Live deployment — https://inventory-app-jade-alpha.vercel.app**
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | admin@inventory.app | ChangeMe-Admin-2026! |
+
+> ⚠️ Change this password after first login (Settings → Users & roles → Add user,
+> then delete/replace this bootstrap account). On any fresh database the first
+> signup automatically becomes an active admin, so no credentials ship with the app.
+
+**Local development (after `npm run db:seed`)**
 
 | Role | Email | Password |
 | --- | --- | --- |
 | Admin | admin@acme.io | admin1234 |
 | Manager | manager@acme.io | manager1234 |
 | Staff | staff@acme.io | staff1234 |
+
+Additional users: sign up from the login page (staff immediately; admin requests
+need approval by an existing admin) or invite from Settings → Users & roles.
 
 ## Notes & limits (demo scope)
 

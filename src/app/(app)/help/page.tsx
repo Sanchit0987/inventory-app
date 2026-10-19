@@ -39,7 +39,7 @@ export default function HelpPage() {
         ))}
       </div>
       <p className="text-center text-xs text-gray-400">
-        Demo accounts: admin@acme.io / admin1234 · manager@acme.io / manager1234 · staff@acme.io / staff1234
+        Need access? Ask an administrator to invite you from Settings → Users &amp; roles, or sign up from the login page.
       </p>
     </div>
   );

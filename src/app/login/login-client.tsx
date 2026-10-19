@@ -5,13 +5,7 @@ import { useActionState, useState } from "react";
 import { login, signup } from "@/actions/auth";
 import { Button, ErrorText, Field, cls, inputCls } from "@/components/ui";
 
-const demoAccounts = [
-  { label: "Admin", email: "admin@acme.io", password: "admin1234" },
-  { label: "Manager", email: "manager@acme.io", password: "manager1234" },
-  { label: "Staff", email: "staff@acme.io", password: "staff1234" },
-];
-
-export default function LoginClient({ demoMode }: { demoMode: boolean }) {
+export default function LoginClient() {
   const [mode, setMode] = useState<"login" | "signup">("login");
 
   return (
@@ -44,30 +38,6 @@ export default function LoginClient({ demoMode }: { demoMode: boolean }) {
 
           {mode === "login" ? <LoginForm /> : <SignupForm onDone={() => setMode("login")} />}
         </div>
-
-        {mode === "login" && demoMode && (
-          <div className="mt-4 rounded-xl bg-white/60 p-4 text-center ring-1 ring-gray-900/5">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-400">Demo accounts</p>
-            <div className="flex justify-center gap-2">
-              {demoAccounts.map((a) => (
-                <button
-                  key={a.label}
-                  type="button"
-                  onClick={() => {
-                    const form = document.getElementById("login-form") as HTMLFormElement;
-                    (form.elements.namedItem("email") as HTMLInputElement).value = a.email;
-                    (form.elements.namedItem("password") as HTMLInputElement).value = a.password;
-                    form.requestSubmit();
-                  }}
-                  className="rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 cursor-pointer"
-                >
-                  {a.label}
-                </button>
-              ))}
-            </div>
-            <p className="mt-2 text-[11px] text-gray-400">One click signs you in with seeded credentials.</p>
-          </div>
-        )}
       </div>
     </div>
   );
