@@ -1,0 +1,341 @@
+// Inventory management schema — Zoho-Inventory-inspired test app
+// Stock quantities live in StockLevel (per product+warehouse).
+// Every stock change writes a StockMovement for auditability/reports.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+// Self-signup accounts requesting ADMIN start as PENDING and must be
+// approved by an existing admin before they can sign in.
+enum UserStatus {
+  ACTIVE
+  PENDING
+}
+
+enum PoStatus {
+  DRAFT
+  ORDERED
+  PARTIAL
+  RECEIVED
+  CANCELLED
+}
+
+enum SoStatus {
+  DRAFT
+  CONFIRMED
+  PACKED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+}
+
+enum TransferStatus {
+  DRAFT
+  IN_TRANSIT
+  COMPLETED
+  CANCELLED
+}
+
+enum MovementType {
+  PURCHASE_RECEIPT
+  SALE_SHIPMENT
+  ADJUSTMENT
+  TRANSFER_IN
+  TRANSFER_OUT
+  SALES_RETURN
+  SUPPLIER_RETURN
+}
+
+enum NotificationType {
+  LOW_STOCK
+  OUT_OF_STOCK
+  ORDER_PENDING
+  ADMIN_APPROVAL
+  INFO
+}
+
+model User {
+  id            String        @id @default(cuid())
+  email         String        @unique
+  passwordHash  String
+  name          String
+  role          Role          @default(STAFF)
+  status        UserStatus    @default(ACTIVE)
+  // role the signup asked for while PENDING (e.g. requested ADMIN)
+  requestedRole Role?
+  // self-signups run the onboarding wizard once
+  onboarded     Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  activities    ActivityLog[]
+  movements     StockMovement[]
+}
+
+model Organization {
+  id           Int     @id @default(1)
+  name         String
+  currency     String  @default("USD")
+  currencySymbol String @default("$")
+  timezone     String  @default("UTC")
+  address      String?
+  lowStockEmailAlerts Boolean @default(true)
+  businessType String?
+  // first-run onboarding wizard completed for the org
+  onboarded    Boolean @default(false)
+  // units of measurement offered in the item form (Settings → Units)
+  units        String[] @default(["pcs", "box", "kg"])
+  // inventory preferences
+  defaultReorderPoint Int @default(5)
+}
+
+model TaxRate {
+  id      String  @id @default(cuid())
+  name    String
+  rate    Float // percent
+  isDefault Boolean @default(false)
+}
+
+model Category {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  products Product[]
+}
+
+model Product {
+  id           String           @id @default(cuid())
+  sku          String           @unique
+  barcode      String?          @unique
+  name         String
+  description  String?
+  imageEmoji   String? // lightweight stand-in for product imagery
+  imageUrl     String?
+  categoryId   String?
+  category     Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  costPrice    Float            @default(0)
+  sellingPrice Float            @default(0)
+  taxRatePct   Float            @default(0)
+  unit         String           @default("pcs")
+  reorderPoint Int              @default(0)
+  supplierId   String?
+  supplier     Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  isActive     Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  variants     ProductVariant[]
+  stockLevels  StockLevel[]
+  movements    StockMovement[]
+  poLines      PurchaseOrderLine[]
+  soLines      SalesOrderLine[]
+  transferLines StockTransferLine[]
+}
+
+model ProductVariant {
+  id         String  @id @default(cuid())
+  productId  String
+  product    Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name       String // e.g. "Red / Large"
+  sku        String  @unique
+  extraPrice Float   @default(0)
+}
+
+model Warehouse {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  name      String
+  address   String?
+  isPrimary Boolean      @default(false)
+  stockLevels StockLevel[]
+  movements StockMovement[]
+  transfersFrom StockTransfer[] @relation("fromWh")
+  transfersTo   StockTransfer[] @relation("toWh")
+  purchaseOrders PurchaseOrder[]
+  salesOrders    SalesOrder[]
+}
+
+model StockLevel {
+  id          String    @id @default(cuid())
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  quantity    Int       @default(0)
+  binLocation String?
+
+  @@unique([productId, warehouseId])
+}
+
+model StockMovement {
+  id          String       @id @default(cuid())
+  type        MovementType
+  productId   String
+  product     Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  warehouseId String
+  warehouse   Warehouse    @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  quantity    Int // signed delta
+  reference   String?
+  note        String?
+  userId      String?
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt   DateTime     @default(now())
+}
+
+model StockTransfer {
+  id              String              @id @default(cuid())
+  number          String              @unique
+  fromWarehouseId String
+  fromWarehouse   Warehouse           @relation("fromWh", fields: [fromWarehouseId], references: [id])
+  toWarehouseId   String
+  toWarehouse     Warehouse           @relation("toWh", fields: [toWarehouseId], references: [id])
+  status          TransferStatus      @default(DRAFT)
+  note            String?
+  createdAt       DateTime            @default(now())
+  completedAt     DateTime?
+  lines           StockTransferLine[]
+}
+
+model StockTransferLine {
+  id         String        @id @default(cuid())
+  transferId String
+  transfer   StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product       @relation(fields: [productId], references: [id])
+  quantity   Int
+}
+
+model Supplier {
+  id             String          @id @default(cuid())
+  name           String
+  email          String?
+  phone          String?
+  address        String?
+  createdAt      DateTime        @default(now())
+  purchaseOrders PurchaseOrder[]
+  products       Product[]
+}
+
+model PurchaseOrder {
+  id           String              @id @default(cuid())
+  number       String              @unique
+  supplierId   String
+  supplier     Supplier            @relation(fields: [supplierId], references: [id])
+  warehouseId  String
+  warehouse    Warehouse           @relation(fields: [warehouseId], references: [id])
+  status       PoStatus            @default(DRAFT)
+  orderDate    DateTime            @default(now())
+  expectedDate DateTime?
+  note         String?
+  isReturn     Boolean             @default(false) // supplier return when true
+  // bill tracking for the Purchases → Bills tab (payable once goods received)
+  billPaid     Boolean             @default(false)
+  billPaidAt   DateTime?
+  createdAt    DateTime            @default(now())
+  lines        PurchaseOrderLine[]
+}
+
+model PurchaseOrderLine {
+  id          String        @id @default(cuid())
+  poId        String
+  po          PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product       @relation(fields: [productId], references: [id])
+  quantity    Int
+  unitCost    Float
+  receivedQty Int           @default(0)
+}
+
+model Customer {
+  id          String       @id @default(cuid())
+  name        String
+  email       String?
+  phone       String?
+  address     String?
+  createdAt   DateTime     @default(now())
+  salesOrders SalesOrder[]
+}
+
+model SalesOrder {
+  id          String           @id @default(cuid())
+  number      String           @unique
+  customerId  String
+  customer    Customer         @relation(fields: [customerId], references: [id])
+  warehouseId String
+  warehouse   Warehouse        @relation(fields: [warehouseId], references: [id])
+  status      SoStatus         @default(DRAFT)
+  orderDate   DateTime         @default(now())
+  note        String?
+  isReturn    Boolean          @default(false) // sales return when true
+  createdAt   DateTime         @default(now())
+  lines       SalesOrderLine[]
+  invoices    Invoice[]
+}
+
+model SalesOrderLine {
+  id           String     @id @default(cuid())
+  soId         String
+  so           SalesOrder @relation(fields: [soId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product    @relation(fields: [productId], references: [id])
+  quantity     Int
+  unitPrice    Float
+  fulfilledQty Int        @default(0)
+}
+
+model Invoice {
+  id        String        @id @default(cuid())
+  number    String        @unique
+  soId      String
+  so        SalesOrder    @relation(fields: [soId], references: [id], onDelete: Cascade)
+  status    InvoiceStatus @default(DRAFT)
+  amount    Float
+  issuedAt  DateTime      @default(now())
+  dueAt     DateTime
+  paidAt    DateTime?
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  link      String?
+  // admin-only notifications (e.g. admin-access requests) are hidden from other roles
+  adminOnly Boolean          @default(false)
+  createdAt DateTime         @default(now())
+}
+
+// Atomic per-prefix document numbering (SO/PO/INV/TR...) — safe under concurrency,
+// unlike count()-based numbering which races and collides.
+model DocCounter {
+  id    String @id // prefix, e.g. "SO"
+  value Int    @default(0)
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String // e.g. "created product"
+  entity    String // e.g. "Product"
+  entityId  String?
+  detail    String?
+  createdAt DateTime @default(now())
+}
